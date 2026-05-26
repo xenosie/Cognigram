@@ -65,3 +65,14 @@ body {
   width: 0;
   height: 0;
 }
+
+/*
+ * twallpaper ships its .tw-wrap as position: fixed with z-index: -1, which makes
+ * the gradient cover the entire viewport — including UNDER our sidebar. Force it
+ * to absolute so it stays inside whichever container we drop the <Wallpaper /> in.
+ */
+.tw-wrap {
+  position: absolute !important;
+  z-index: 0 !important;
+}
+

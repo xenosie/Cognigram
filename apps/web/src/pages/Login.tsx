@@ -12,35 +12,71 @@ import {
 import { Logo } from '../components/Logo'
 import { Background } from '../components/Background'
 import { AnimatedPage } from '../components/AnimatedPage'
+import { auth } from '../api/auth'
+import { ApiError } from '../api/client'
+import { useAuth } from '../store/auth'
 
 type Step = 'credentials' | 'totp'
 
 export default function Login() {
   const navigate = useNavigate()
+  const setTokens = useAuth((s) => s.setTokens)
+
   const [step, setStep] = useState<Step>('credentials')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
+  const [challengeToken, setChallengeToken] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleCredentials = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email || !password) return
     setSubmitting(true)
-    // TODO: wire to /auth/login endpoint
-    await new Promise((r) => setTimeout(r, 400))
-    setSubmitting(false)
-    setStep('totp')
+    setError(null)
+    try {
+      const res = await auth.login(email.trim().toLowerCase(), password)
+      if (res.status === 'authenticated') {
+        setTokens(res.access_token, res.refresh_token, res.expires_in)
+        navigate('/app', { replace: true })
+      } else if (res.status === 'needs_email_verification') {
+        navigate(
+          `/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`,
+        )
+      } else if (res.status === 'needs_totp') {
+        setChallengeToken(res.challenge_token)
+        setStep('totp')
+      }
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        setError('Wrong email or password.')
+      } else {
+        setError(e instanceof ApiError ? e.message : 'Something went wrong.')
+      }
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   const handleTotp = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (code.length !== 6) return
+    if (!challengeToken || code.length !== 6) return
     setSubmitting(true)
-    // TODO: wire to /auth/login/verify-totp
-    await new Promise((r) => setTimeout(r, 400))
-    setSubmitting(false)
-    navigate('/')
+    setError(null)
+    try {
+      const tokens = await auth.loginTotp(challengeToken, code)
+      setTokens(tokens.access_token, tokens.refresh_token, tokens.expires_in)
+      navigate('/app', { replace: true })
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 401) {
+        setError('That code is wrong or expired.')
+      } else {
+        setError(e instanceof ApiError ? e.message : 'Something went wrong.')
+      }
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -98,6 +134,8 @@ export default function Login() {
                     <FieldError />
                   </TextField>
 
+                  {error && <p className="text-sm text-keracross-600">{error}</p>}
+
                   <Button
                     type="submit"
                     variant="primary"
@@ -112,11 +150,7 @@ export default function Login() {
                   onSubmit={handleTotp}
                   className="mt-8 flex flex-col items-start gap-6"
                 >
-                  <InputOTP
-                    value={code}
-                    onChange={setCode}
-                    maxLength={6}
-                  >
+                  <InputOTP value={code} onChange={setCode} maxLength={6}>
                     <InputOTP.Group>
                       {Array.from({ length: 6 }).map((_, i) => (
                         <InputOTP.Slot key={i} index={i} />
@@ -124,11 +158,17 @@ export default function Login() {
                     </InputOTP.Group>
                   </InputOTP>
 
+                  {error && <p className="text-sm text-keracross-600">{error}</p>}
+
                   <div className="flex w-full gap-3">
                     <Button
                       type="button"
                       variant="ghost"
-                      onPress={() => setStep('credentials')}
+                      onPress={() => {
+                        setStep('credentials')
+                        setCode('')
+                        setError(null)
+                      }}
                     >
                       Back
                     </Button>
@@ -157,7 +197,7 @@ export default function Login() {
           </div>
         </div>
 
-        {/* Brand / animated panel */}
+        {/* Brand panel */}
         <div className="relative hidden lg:block">
           <Background className="absolute inset-0" interactive={false} />
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-keracross-900/30 via-keracross-700/20 to-keracross-500/10" />

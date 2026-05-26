@@ -11,10 +11,13 @@ import {
 import { Logo } from '../components/Logo'
 import { Background } from '../components/Background'
 import { AnimatedPage } from '../components/AnimatedPage'
+import { auth } from '../api/auth'
+import { ApiError } from '../api/client'
 
 export default function Signup() {
   const navigate = useNavigate()
   const [email, setEmail] = useState('')
+  const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -22,19 +25,46 @@ export default function Signup() {
 
   const mismatch = confirm.length > 0 && confirm !== password
   const tooShort = password.length > 0 && password.length < 8
+  const usernameTooShort = username.length > 0 && username.length < 5
+  const usernameInvalid =
+    username.length > 0 && !/^[A-Za-z0-9_]+$/.test(username)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
-    if (!email || !password || password !== confirm || password.length < 8) {
+    if (
+      !email ||
+      !username ||
+      username.length < 5 ||
+      !/^[A-Za-z0-9_]+$/.test(username) ||
+      !password ||
+      password !== confirm ||
+      password.length < 8
+    ) {
       setError('Please fix the highlighted fields.')
       return
     }
     setSubmitting(true)
-    // TODO: wire to /auth/signup endpoint
-    await new Promise((r) => setTimeout(r, 500))
-    setSubmitting(false)
-    navigate('/login')
+    try {
+      await auth.signup(
+        email.trim().toLowerCase(),
+        username.trim().toLowerCase(),
+        password,
+      )
+      navigate(`/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`)
+    } catch (e) {
+      if (e instanceof ApiError && e.message.includes('username')) {
+        setError('That username is taken — try another.')
+      } else if (e instanceof ApiError && e.code === 'conflict') {
+        setError('An account already exists for that email.')
+      } else if (e instanceof ApiError) {
+        setError(e.message)
+      } else {
+        setError('Something went wrong. Try again.')
+      }
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -79,7 +109,7 @@ export default function Signup() {
                 Create your account
               </h1>
               <p className="mt-2 text-sm text-neutral-500">
-                Use your email and a password. We'll set up 2FA next.
+                Use your email and a password. We'll send a verification code.
               </p>
 
               <form onSubmit={handleSubmit} className="mt-8 space-y-5">
@@ -93,6 +123,25 @@ export default function Signup() {
                   <Label>Email</Label>
                   <Input placeholder="you@domain.com" />
                   <FieldError />
+                </TextField>
+
+                <TextField
+                  value={username}
+                  onChange={setUsername}
+                  type="text"
+                  autoComplete="username"
+                  isRequired
+                  isInvalid={usernameTooShort || usernameInvalid}
+                >
+                  <Label>Username</Label>
+                  <Input placeholder="e.g. john_doe (5+ chars, a–z, 0–9, _)" />
+                  <FieldError>
+                    {usernameInvalid
+                      ? 'Only letters, numbers, and underscores.'
+                      : usernameTooShort
+                        ? 'Username must be at least 5 characters.'
+                        : ''}
+                  </FieldError>
                 </TextField>
 
                 <TextField
