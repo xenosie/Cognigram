@@ -6,16 +6,17 @@ use crate::error::{AppError, AppResult};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String, // user id (hex)
+    /// User id as decimal string (matches `u64::to_string`).
+    pub sub: String,
     pub exp: i64,
     pub iat: i64,
     pub typ: String, // "access"
 }
 
-pub fn issue_access(user_id_hex: &str, secret: &str, ttl_secs: u64) -> AppResult<String> {
+pub fn issue_access(user_id: u64, secret: &str, ttl_secs: u64) -> AppResult<String> {
     let now = Utc::now().timestamp();
     let claims = Claims {
-        sub: user_id_hex.to_string(),
+        sub: user_id.to_string(),
         iat: now,
         exp: now + ttl_secs as i64,
         typ: "access".to_string(),

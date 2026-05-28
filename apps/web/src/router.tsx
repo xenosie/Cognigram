@@ -2,9 +2,8 @@ import { AnimatePresence } from 'framer-motion'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import Landing from './pages/Landing'
 import Login from './pages/Login'
-import Signup from './pages/Signup'
-import VerifyEmail from './pages/VerifyEmail'
-import Setup2FA from './pages/Setup2FA'
+import PickUsername from './pages/PickUsername'
+import Profile from './pages/Profile'
 import Home from './pages/Home'
 import { ProtectedRoute } from './components/ProtectedRoute'
 
@@ -15,18 +14,34 @@ export function AppRoutes() {
       <Routes location={location} key={location.pathname}>
         <Route path="/" element={<Landing />} />
         <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route path="/verify-email" element={<VerifyEmail />} />
         <Route
-          path="/setup-2fa"
+          path="/pick-username"
           element={
-            <ProtectedRoute>
-              <Setup2FA />
+            <ProtectedRoute allowMissingUsername>
+              <PickUsername />
             </ProtectedRoute>
           }
         />
         <Route
           path="/app"
+          element={
+            <ProtectedRoute>
+              <Home />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/profile"
+          element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          }
+        />
+        {/* Channels and groups share the same shell as DMs — Home reads the
+            uname param and renders ChannelView in the chat column. */}
+        <Route
+          path="/c/:uname"
           element={
             <ProtectedRoute>
               <Home />

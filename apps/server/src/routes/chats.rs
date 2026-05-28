@@ -1,18 +1,13 @@
+use std::collections::HashMap;
+
 use axum::extract::{Path, Query, State};
 use axum::routing::get;
 use axum::{Json, Router};
-use mongodb::bson::{doc, oid::ObjectId, DateTime as BsonDateTime};
-use mongodb::options::FindOptions;
+use bytes::Bytes;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
-use validator::Validate;
-use futures_util::stream::TryStreamExt;
-
-use std::collections::HashMap;
-
 use crate::error::{AppError, AppResult};
 use crate::middleware::AuthUser;
-use crate::models::chat::{Chat, Message, PublicChat, PublicMessage, PublicParticipant};
+use crate::models::chat::{Chat, PublicChat, PublicMessage, PublicParticipant};
 use crate::models::user::User;
 use crate::state::AppState;
 
@@ -22,109 +17,84 @@ pub fn router() -> Router<AppState> {
         .route("/chats/:id/messages", get(list_messages).post(send_message))
 }
 
-fn now() -> BsonDateTime {
-    BsonDateTime::now()
-}
-
-fn sort_participants(a: ObjectId, b: ObjectId) -> Vec<ObjectId> {
-    if a <= b { vec![a, b] } else { vec![b, a] }
-}
-
-/* -------------------- list user's chats -------------------- */
+/* -------------------- GET /chats -------------------- */
 
 async fn list_chats(
     State(state): State<AppState>,
     auth: AuthUser,
 ) -> AppResult<Json<Vec<PublicChat>>> {
-    let chats = state
-        .db
-        .database
-        .collection::<Chat>("chats")
-        .find(doc! { "participants": auth.user_id })
-        .sort(doc! { "last_message_at": -1 })
-        .await?
-        .try_collect::<Vec<_>>()
-        .await?;
-
-    let enriched = enrich_chats(&state, chats).await?;
-    Ok(Json(enriched))
+    let chats = state.store.list_chats_for_user(auth.user_id)?;
+    Ok(Json(enrich_chats(&state, chats, auth.user_id)?))
 }
 
-/// Single batched lookup of all participant users + last-message preview per chat.
-async fn enrich_chats(state: &AppState, chats: Vec<Chat>) -> AppResult<Vec<PublicChat>> {
+/// Hydrate participant info, unread count, and the other party's read cursor
+/// for the viewer.
+fn enrich_chats(
+    state: &AppState,
+    chats: Vec<Chat>,
+    viewer_id: u64,
+) -> AppResult<Vec<PublicChat>> {
     if chats.is_empty() {
         return Ok(vec![]);
     }
-
-    let mut user_ids: Vec<ObjectId> = chats.iter().flat_map(|c| c.participants.clone()).collect();
+    let mut user_ids: Vec<u64> =
+        chats.iter().flat_map(|c| c.participants.iter().copied()).collect();
     user_ids.sort();
     user_ids.dedup();
 
-    let users: Vec<User> = state
-        .db
-        .database
-        .collection::<User>("users")
-        .find(doc! { "_id": { "$in": &user_ids } })
-        .await?
-        .try_collect()
-        .await?;
-    let by_id: HashMap<ObjectId, &User> =
-        users.iter().filter_map(|u| u.id.map(|id| (id, u))).collect();
-
-    let chat_ids: Vec<ObjectId> = chats.iter().filter_map(|c| c.id).collect();
-    let mut previews: HashMap<ObjectId, String> = HashMap::new();
-    if !chat_ids.is_empty() {
-        // Fetch the latest message per chat. Aggregation $group is the cleanest.
-        let pipeline = vec![
-            doc! { "$match": { "chat_id": { "$in": &chat_ids } } },
-            doc! { "$sort": { "_id": -1 } },
-            doc! {
-                "$group": {
-                    "_id": "$chat_id",
-                    "body": { "$first": "$body" }
-                }
-            },
-        ];
-        let mut cursor = state
-            .db
-            .database
-            .collection::<mongodb::bson::Document>("messages")
-            .aggregate(pipeline)
-            .await?;
-        while let Some(doc) = cursor.try_next().await? {
-            if let (Ok(chat_id), Ok(body)) = (doc.get_object_id("_id"), doc.get_str("body")) {
-                previews.insert(chat_id, body.to_string());
-            }
+    let mut by_id: HashMap<u64, User> = HashMap::with_capacity(user_ids.len());
+    for uid in user_ids {
+        if let Some(u) = state.store.find_user_by_id(uid)? {
+            by_id.insert(uid, u);
         }
     }
 
-    Ok(chats
+    chats
         .into_iter()
-        .map(|c| PublicChat {
-            id: c.id.map(|i| i.to_hex()).unwrap_or_default(),
-            participants: c
+        .map(|c| {
+            // The "other" participant in a 1:1 chat — we only have two.
+            let other_id = c
                 .participants
                 .iter()
-                .map(|pid| {
-                    let user = by_id.get(pid);
-                    let email = user
-                        .map(|u| u.email.clone())
-                        .unwrap_or_else(|| "unknown".to_string());
-                    let username = user.and_then(|u| u.username.clone());
-                    PublicParticipant {
-                        id: pid.to_hex(),
-                        email,
-                        username,
-                    }
-                })
-                .collect(),
-            last_message_at: c.last_message_at.map(|d| d.timestamp_millis()),
-            last_message_preview: c.id.and_then(|id| previews.get(&id).cloned()),
+                .find(|&&p| p != viewer_id)
+                .copied()
+                .unwrap_or(c.participants[0]);
+            let unread_count = state.store.count_unread(c.id, viewer_id)?;
+            let other_last_read = state.store.get_chat_read(c.id, other_id)?;
+            let other_online = state.hub.is_online(other_id);
+            Ok(PublicChat {
+                id: c.id.to_string(),
+                participants: c
+                    .participants
+                    .iter()
+                    .map(|pid| match by_id.get(pid) {
+                        Some(u) => PublicParticipant {
+                            id: u.id.to_string(),
+                            email: u.email.clone(),
+                            username: u.username.clone(),
+                            name: u.name.clone(),
+                            picture: u.picture.clone(),
+                        },
+                        None => PublicParticipant {
+                            id: pid.to_string(),
+                            email: "unknown".into(),
+                            username: None,
+                            name: None,
+                            picture: None,
+                        },
+                    })
+                    .collect(),
+                last_message_at: c.last_message_at,
+                last_message_preview: c.last_message_preview,
+                unread_count,
+                other_last_read,
+                other_online,
+            })
         })
-        .collect())
+        .collect::<AppResult<Vec<PublicChat>>>()
 }
 
-/* -------------------- find or create a 1:1 chat -------------------- */
+/* -------------------- POST /chats -------------------- */
 
 #[derive(Debug, Deserialize)]
 struct CreateChatReq {
@@ -137,58 +107,48 @@ async fn create_chat(
     auth: AuthUser,
     Json(req): Json<CreateChatReq>,
 ) -> AppResult<Json<PublicChat>> {
-    let handle = req.handle.trim().to_lowercase();
+    let handle = req.handle.trim();
     if handle.is_empty() {
         return Err(AppError::BadRequest("handle is required".into()));
     }
-
-    let users = state.db.database.collection::<User>("users");
-    let other = users
-        .find_one(doc! {
-            "$or": [
-                { "email": &handle },
-                { "username": &handle },
-            ]
-        })
-        .await?
+    let other = state
+        .store
+        .find_user_by_handle(handle)?
         .ok_or(AppError::NotFound)?;
-    let other_id = other.id.ok_or(AppError::NotFound)?;
-
-    if other_id == auth.user_id {
+    if other.id == auth.user_id {
         return Err(AppError::BadRequest("cannot chat with yourself".into()));
     }
-
-    let parts = sort_participants(auth.user_id, other_id);
-    let chats = state.db.database.collection::<Chat>("chats");
-
-    if let Some(existing) = chats
-        .find_one(doc! { "participants": &parts })
-        .await?
+    let chat = state.store.open_or_create_chat(auth.user_id, other.id).await?;
+    let for_me = enrich_chats(&state, vec![chat.clone()], auth.user_id)?
+        .into_iter()
+        .next()
+        .unwrap();
+    // Push the chat into the OTHER participant's sidebar in real time. We
+    // build it from their perspective (their unread + the other party's read
+    // cursor) so the payload drops straight into their store with no
+    // extra refetch. Idempotent on the client — duplicate ids are deduped.
+    if let Ok(mut for_other) =
+        enrich_chats(&state, vec![chat.clone()], other.id)
     {
-        let enriched = enrich_chats(&state, vec![existing]).await?;
-        return Ok(Json(enriched.into_iter().next().unwrap()));
+        if let Some(payload_chat) = for_other.pop() {
+            let payload = serde_json::json!({
+                "type": "chat_opened",
+                "payload": payload_chat,
+            });
+            if let Ok(bytes) = serde_json::to_vec(&payload) {
+                state.hub.deliver(&[other.id], Bytes::from(bytes));
+            }
+        }
     }
-
-    let chat = Chat {
-        id: None,
-        participants: parts,
-        last_message_at: None,
-        created_at: now(),
-        updated_at: now(),
-    };
-    let res = chats.insert_one(&chat).await?;
-    let mut created = chat;
-    created.id = res.inserted_id.as_object_id();
-    let enriched = enrich_chats(&state, vec![created]).await?;
-    Ok(Json(enriched.into_iter().next().unwrap()))
+    Ok(Json(for_me))
 }
 
-/* -------------------- list messages in a chat -------------------- */
+/* -------------------- GET /chats/:id/messages -------------------- */
 
 #[derive(Debug, Deserialize)]
 struct ListMessagesQuery {
     limit: Option<i64>,
-    before: Option<String>, // ObjectId hex
+    before: Option<String>,
 }
 
 async fn list_messages(
@@ -197,54 +157,52 @@ async fn list_messages(
     Path(chat_id): Path<String>,
     Query(q): Query<ListMessagesQuery>,
 ) -> AppResult<Json<Vec<PublicMessage>>> {
-    let chat_oid = ObjectId::parse_str(&chat_id)
-        .map_err(|_| AppError::BadRequest("bad chat id".into()))?;
-
-    let chat = state
-        .db
-        .database
-        .collection::<Chat>("chats")
-        .find_one(doc! { "_id": chat_oid })
-        .await?
-        .ok_or(AppError::NotFound)?;
+    let chat_id: u64 = chat_id.parse().map_err(|_| AppError::BadRequest("bad chat id".into()))?;
+    let chat = state.store.get_chat(chat_id)?.ok_or(AppError::NotFound)?;
     if !chat.participants.contains(&auth.user_id) {
-        return Err(AppError::Forbidden);
+        return Err(AppError::Forbidden("not a chat participant"));
     }
-
-    let mut filter = doc! { "chat_id": chat_oid };
-    if let Some(before) = q.before.as_ref() {
-        let before_oid = ObjectId::parse_str(before)
-            .map_err(|_| AppError::BadRequest("bad before cursor".into()))?;
-        filter.insert("_id", doc! { "$lt": before_oid });
-    }
-
-    let limit = q.limit.unwrap_or(50).clamp(1, 200);
-    let opts = FindOptions::builder()
-        .sort(doc! { "_id": -1 })
-        .limit(limit)
-        .build();
-
-    let mut messages = state
-        .db
-        .database
-        .collection::<Message>("messages")
-        .find(filter)
-        .with_options(opts)
-        .await?
-        .try_collect::<Vec<_>>()
-        .await?;
-    // Return in ascending order for UI
-    messages.reverse();
-    Ok(Json(messages.iter().map(PublicMessage::from).collect()))
+    let before = match q.before.as_deref() {
+        Some(s) => Some(
+            s.parse::<u64>()
+                .map_err(|_| AppError::BadRequest("bad before cursor".into()))?,
+        ),
+        None => None,
+    };
+    let limit = q.limit.unwrap_or(50).clamp(1, 200) as usize;
+    let msgs = state.store.list_messages(chat_id, limit, before)?;
+    Ok(Json(msgs.iter().map(PublicMessage::from).collect()))
 }
 
-/* -------------------- send a message (REST fallback + WS-fanout) -------------------- */
+/* -------------------- POST /chats/:id/messages -------------------- */
 
-#[derive(Debug, Deserialize, Validate)]
-struct SendMessageReq {
-    #[validate(length(min = 1, max = 4096))]
-    body: String,
+#[derive(Debug, Deserialize)]
+pub struct SendMessageReq {
+    #[serde(default)]
+    pub body: String,
+    #[serde(default)]
+    pub attachment_id: Option<String>,
 }
+
+async fn send_message(
+    State(state): State<AppState>,
+    auth: AuthUser,
+    Path(chat_id): Path<String>,
+    Json(req): Json<SendMessageReq>,
+) -> AppResult<Json<PublicMessage>> {
+    let chat_id: u64 = chat_id.parse().map_err(|_| AppError::BadRequest("bad chat id".into()))?;
+    let pub_msg = persist_and_broadcast(
+        &state,
+        chat_id,
+        auth.user_id,
+        req.body,
+        req.attachment_id,
+    )
+    .await?;
+    Ok(Json(pub_msg))
+}
+
+/* -------------------- internal: persist + broadcast -------------------- */
 
 #[derive(Debug, Serialize)]
 struct WsEvent<'a, T: Serialize> {
@@ -255,67 +213,50 @@ struct WsEvent<'a, T: Serialize> {
 
 pub async fn persist_and_broadcast(
     state: &AppState,
-    chat_id: ObjectId,
-    sender_id: ObjectId,
+    chat_id: u64,
+    sender_id: u64,
     body: String,
+    attachment_id: Option<String>,
 ) -> AppResult<PublicMessage> {
-    // Validate the sender is a participant
-    let chats = state.db.database.collection::<Chat>("chats");
-    let chat = chats
-        .find_one(doc! { "_id": chat_id })
-        .await?
-        .ok_or(AppError::NotFound)?;
-    if !chat.participants.contains(&sender_id) {
-        return Err(AppError::Forbidden);
+    let body = body.trim().to_string();
+    if body.len() > 4096 {
+        return Err(AppError::BadRequest("body too long".into()));
     }
 
-    let msg = Message {
-        id: None,
-        chat_id,
-        sender_id,
-        body,
-        created_at: now(),
+    // Resolve and validate the attachment, if any. Owner must equal sender so
+    // a malicious client can't attach someone else's upload by guessing IDs.
+    // Stickers are the explicit exception — they're shared content and anyone
+    // can send them once a pack is installed.
+    let attachment = match attachment_id.as_deref() {
+        Some(id) if !id.is_empty() => {
+            let upload = state
+                .store
+                .find_upload(id)?
+                .ok_or_else(|| AppError::BadRequest("unknown attachment".into()))?;
+            let is_sticker = matches!(
+                upload.attachment.kind,
+                crate::models::chat::AttachmentKind::Sticker
+            );
+            if !is_sticker && upload.owner_id != sender_id {
+                return Err(AppError::Forbidden("not your attachment"));
+            }
+            Some(upload.attachment)
+        }
+        _ => None,
     };
-    let res = state
-        .db
-        .database
-        .collection::<Message>("messages")
-        .insert_one(&msg)
-        .await?;
-    let mut stored = msg;
-    stored.id = res.inserted_id.as_object_id();
 
-    // bump chat
-    chats
-        .update_one(
-            doc! { "_id": chat_id },
-            doc! { "$set": { "last_message_at": stored.created_at, "updated_at": stored.created_at } },
-        )
-        .await?;
+    if body.is_empty() && attachment.is_none() {
+        return Err(AppError::BadRequest("empty message".into()));
+    }
 
-    let public = PublicMessage::from(&stored);
+    let (msg, chat) = state
+        .store
+        .append_message(chat_id, sender_id, body, attachment)
+        .await?;
+    let public = PublicMessage::from(&msg);
     let event = WsEvent { typ: "message", payload: &public };
-    let payload = serde_json::to_string(&event).unwrap();
-    // fan out to all participants (including sender — for multi-device sync)
-    state.hub.deliver(&chat.participants, payload);
-
+    let payload = serde_json::to_vec(&event)
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("ws encode: {e}")))?;
+    state.hub.deliver(&chat.participants, Bytes::from(payload));
     Ok(public)
-}
-
-async fn send_message(
-    State(state): State<AppState>,
-    auth: AuthUser,
-    Path(chat_id): Path<String>,
-    Json(req): Json<SendMessageReq>,
-) -> AppResult<Json<PublicMessage>> {
-    req.validate().map_err(|e| AppError::BadRequest(e.to_string()))?;
-    let chat_oid = ObjectId::parse_str(&chat_id)
-        .map_err(|_| AppError::BadRequest("bad chat id".into()))?;
-    let m = persist_and_broadcast(&state, chat_oid, auth.user_id, req.body).await?;
-    Ok(Json(m))
-}
-
-#[allow(dead_code)]
-fn ack_response() -> Json<serde_json::Value> {
-    Json(json!({ "status": "ok" }))
 }

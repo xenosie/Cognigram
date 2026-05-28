@@ -11,8 +11,8 @@ pub enum AppError {
     #[error("unauthorized")]
     Unauthorized,
 
-    #[error("forbidden")]
-    Forbidden,
+    #[error("forbidden: {0}")]
+    Forbidden(&'static str),
 
     #[error("not found")]
     NotFound,
@@ -27,7 +27,39 @@ pub enum AppError {
     Internal(#[from] anyhow::Error),
 
     #[error("database error")]
-    Db(#[from] mongodb::error::Error),
+    Db(#[from] redb::Error),
+}
+
+impl From<redb::TransactionError> for AppError {
+    fn from(e: redb::TransactionError) -> Self {
+        Self::Db(e.into())
+    }
+}
+impl From<redb::TableError> for AppError {
+    fn from(e: redb::TableError) -> Self {
+        Self::Db(e.into())
+    }
+}
+impl From<redb::StorageError> for AppError {
+    fn from(e: redb::StorageError) -> Self {
+        Self::Db(e.into())
+    }
+}
+impl From<redb::CommitError> for AppError {
+    fn from(e: redb::CommitError) -> Self {
+        Self::Db(e.into())
+    }
+}
+impl From<redb::DatabaseError> for AppError {
+    fn from(e: redb::DatabaseError) -> Self {
+        Self::Internal(anyhow::anyhow!("redb open: {e}"))
+    }
+}
+
+impl From<bincode::Error> for AppError {
+    fn from(e: bincode::Error) -> Self {
+        Self::Internal(anyhow::anyhow!("bincode: {e}"))
+    }
 }
 
 impl AppError {
@@ -35,7 +67,7 @@ impl AppError {
         match self {
             Self::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             Self::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
-            Self::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
+            Self::Forbidden(code) => (StatusCode::FORBIDDEN, code),
             Self::NotFound => (StatusCode::NOT_FOUND, "not_found"),
             Self::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
             Self::TooManyRequests => (StatusCode::TOO_MANY_REQUESTS, "rate_limited"),
@@ -47,7 +79,6 @@ impl AppError {
 impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, code) = self.status_and_code();
-        // log full error server-side
         if matches!(self, Self::Internal(_) | Self::Db(_)) {
             tracing::error!(error = ?self, "server error");
         } else {

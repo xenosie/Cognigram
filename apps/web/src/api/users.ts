@@ -4,6 +4,8 @@ export type Contact = {
   id: string
   email: string
   username: string | null
+  name: string | null
+  picture: string | null
 }
 
 export const users = {

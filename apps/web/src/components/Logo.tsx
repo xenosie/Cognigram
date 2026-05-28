@@ -14,7 +14,7 @@ export function Logo({ size = 96, animated = true, className }: LogoProps) {
         src={logoUrl}
         width={size}
         height={size}
-        alt="Keracross"
+        alt="Cognigram"
         className={className}
         draggable={false}
       />
@@ -26,7 +26,7 @@ export function Logo({ size = 96, animated = true, className }: LogoProps) {
       src={logoUrl}
       width={size}
       height={size}
-      alt="Keracross"
+      alt="Cognigram"
       className={className}
       draggable={false}
       initial={{ scale: 0.6, opacity: 0, rotate: -12 }}

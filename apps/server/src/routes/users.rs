@@ -1,14 +1,10 @@
 use axum::extract::{Query, State};
 use axum::routing::get;
 use axum::{Json, Router};
-use futures_util::stream::TryStreamExt;
-use mongodb::bson::doc;
-use mongodb::options::FindOptions;
 use serde::{Deserialize, Serialize};
 
 use crate::error::AppResult;
 use crate::middleware::AuthUser;
-use crate::models::user::User;
 use crate::state::AppState;
 
 pub fn router() -> Router<AppState> {
@@ -17,9 +13,7 @@ pub fn router() -> Router<AppState> {
 
 #[derive(Debug, Deserialize)]
 struct ListUsersQuery {
-    /// Case-insensitive substring match on either email or username.
     q: Option<String>,
-    /// Max results — clamped to [1, 200], default 100.
     limit: Option<i64>,
 }
 
@@ -28,67 +22,32 @@ struct PublicContact {
     id: String,
     email: String,
     username: Option<String>,
+    name: Option<String>,
+    picture: Option<String>,
 }
 
+// Substring match on email or username. We scan the USERS table linearly
+// (bounded by `limit`) — fine up to ~10k users. Above that, add a prefix
+// trie or move to a SQL backend.
 async fn list_users(
     State(state): State<AppState>,
     auth: AuthUser,
-    Query(query): Query<ListUsersQuery>,
+    Query(q): Query<ListUsersQuery>,
 ) -> AppResult<Json<Vec<PublicContact>>> {
-    let limit = query.limit.unwrap_or(100).clamp(1, 200);
-
-    let mut filter = doc! { "_id": { "$ne": auth.user_id } };
-    if let Some(term) = query.q.as_ref() {
-        let term = term.trim();
-        if !term.is_empty() {
-            let escaped = regex_escape(term);
-            // Match either field via $or
-            filter.insert(
-                "$or",
-                vec![
-                    doc! { "email": { "$regex": &escaped, "$options": "i" } },
-                    doc! { "username": { "$regex": &escaped, "$options": "i" } },
-                ],
-            );
-        }
-    }
-
-    let opts = FindOptions::builder()
-        .sort(doc! { "username": 1, "email": 1 })
-        .limit(limit)
-        .build();
-
-    let users: Vec<User> = state
-        .db
-        .database
-        .collection::<User>("users")
-        .find(filter)
-        .with_options(opts)
-        .await?
-        .try_collect()
-        .await?;
-
+    let limit = q.limit.unwrap_or(100).clamp(1, 200) as usize;
+    let users = state
+        .store
+        .list_users(q.q.as_deref(), limit, auth.user_id)?;
     Ok(Json(
         users
             .iter()
-            .filter_map(|u| {
-                u.id.map(|id| PublicContact {
-                    id: id.to_hex(),
-                    email: u.email.clone(),
-                    username: u.username.clone(),
-                })
+            .map(|u| PublicContact {
+                id: u.id.to_string(),
+                email: u.email.clone(),
+                username: u.username.clone(),
+                name: u.name.clone(),
+                picture: u.picture.clone(),
             })
             .collect(),
     ))
-}
-
-fn regex_escape(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() * 2);
-    for c in s.chars() {
-        if "\\^$.|?*+()[]{}".contains(c) {
-            out.push('\\');
-        }
-        out.push(c);
-    }
-    out
 }

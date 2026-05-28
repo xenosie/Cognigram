@@ -11,49 +11,30 @@ export type PublicUser = {
   id: string
   email: string
   username: string | null
-  email_verified: boolean
-  totp_enabled: boolean
+  name: string | null
+  picture: string | null
 }
 
-export type LoginResponse =
-  | ({ status: 'authenticated' } & TokenPair)
-  | { status: 'needs_email_verification' }
-  | { status: 'needs_totp'; challenge_token: string; expires_in: number }
-
-export type TotpSetupResponse = {
-  secret: string
-  otpauth_url: string
+export type GoogleAuthResponse = {
+  user: PublicUser
+  tokens: TokenPair
+  needs_username: boolean
 }
 
 export const auth = {
-  signup: (email: string, username: string, password: string) =>
-    api<{ status: string; email: string }>('/auth/signup', {
+  /** Exchange a Google Identity Services `credential` (id_token) for our token pair. */
+  googleLogin: (id_token: string) =>
+    api<GoogleAuthResponse>('/auth/google', {
       method: 'POST',
-      body: { email, username, password },
+      body: { id_token },
     }),
 
-  verifyEmail: (email: string, code: string) =>
-    api<TokenPair>('/auth/verify-email', {
+  /** One-time username pick after first Google sign-in. */
+  setUsername: (username: string) =>
+    api<PublicUser>('/auth/username', {
       method: 'POST',
-      body: { email, code },
-    }),
-
-  resendVerification: (email: string) =>
-    api<{ status: string }>('/auth/resend-verification', {
-      method: 'POST',
-      body: { email },
-    }),
-
-  login: (email: string, password: string) =>
-    api<LoginResponse>('/auth/login', {
-      method: 'POST',
-      body: { email, password },
-    }),
-
-  loginTotp: (challenge_token: string, code: string) =>
-    api<TokenPair>('/auth/login/totp', {
-      method: 'POST',
-      body: { challenge_token, code },
+      auth: true,
+      body: { username },
     }),
 
   me: () => api<PublicUser>('/auth/me', { auth: true }),
@@ -62,15 +43,5 @@ export const auth = {
     api<{ status: string }>('/auth/logout', {
       method: 'POST',
       body: { refresh_token },
-    }),
-
-  totpSetup: () =>
-    api<TotpSetupResponse>('/auth/2fa/setup', { method: 'POST', auth: true }),
-
-  totpEnable: (code: string) =>
-    api<{ status: string }>('/auth/2fa/enable', {
-      method: 'POST',
-      auth: true,
-      body: { code },
     }),
 }

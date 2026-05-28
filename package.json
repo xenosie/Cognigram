@@ -1,11 +1,11 @@
 {
-  "name": "keracross",
+  "name": "cognigram",
   "version": "0.0.0",
   "private": true,
-  "description": "Keracross — Telegram-inspired chat app",
+  "description": "Cognigram — Telegram-inspired chat app",
   "scripts": {
-    "dev:web": "pnpm --filter @keracross/web dev",
-    "build:web": "pnpm --filter @keracross/web build"
+    "dev:web": "pnpm --filter @cognigram/web dev",
+    "build:web": "pnpm --filter @cognigram/web build"
   },
   "packageManager": "pnpm@11.1.2"
 }

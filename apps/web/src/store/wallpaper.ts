@@ -86,7 +86,7 @@ export const useWallpaper = create<State>()(
       setPattern: (id) => set({ patternId: id }),
       reset: () => set({ themeId: DEFAULT_THEME, patternId: DEFAULT_PATTERN }),
     }),
-    { name: 'keracross-wallpaper' },
+    { name: 'cognigram-wallpaper' },
   ),
 )
 

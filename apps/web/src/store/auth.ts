@@ -37,7 +37,7 @@ export const useAuth = create<AuthState>()(
         }),
     }),
     {
-      name: 'keracross-auth',
+      name: 'cognigram-auth',
       partialize: (state) => ({
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,

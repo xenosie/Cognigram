@@ -28,3 +28,13 @@ pnpm-debug.log*
 .turbo
 .cache
 *.tsbuildinfo
+
+# Server runtime state — do NOT commit user data, hashed tokens, or
+# anything the server writes during operation.
+apps/server/cognigram.redb
+apps/server/cognigram.redb.*
+apps/server/data/uploads/avatars/
+apps/server/data/uploads/channel-avatars/
+apps/server/data/uploads/files/
+# Keep apps/server/data/uploads/stickers/default/ — that's the bundled
+# default sticker pack and is part of the codebase.

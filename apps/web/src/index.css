@@ -1,7 +1,7 @@
 @import '@heroui/styles';
 @import '@twallpaper/react/css';
 
-/* Keracross theme: white background + blood-red accent */
+/* Cognigram theme: white background + blood-red accent */
 @layer base {
   :root,
   .light,
@@ -10,36 +10,36 @@
     --foreground: oklch(0.18 0.01 25);
     --surface: oklch(100% 0 0);
 
-    /* Blood-red ramp */
-    --keracross-50: oklch(97% 0.02 25);
-    --keracross-100: oklch(92% 0.06 25);
-    --keracross-200: oklch(84% 0.12 25);
-    --keracross-300: oklch(74% 0.17 25);
-    --keracross-400: oklch(64% 0.21 25);
-    --keracross-500: oklch(55% 0.22 26);
-    --keracross-600: oklch(47% 0.20 26);
-    --keracross-700: oklch(40% 0.17 27);
-    --keracross-800: oklch(33% 0.14 27);
-    --keracross-900: oklch(26% 0.10 27);
+    /* Softened coral/dusty-rose ramp — lower chroma, hue shifted toward pink. */
+    --cognigram-50:  oklch(97.5% 0.012 18);
+    --cognigram-100: oklch(94%   0.030 18);
+    --cognigram-200: oklch(88%   0.055 16);
+    --cognigram-300: oklch(80%   0.080 16);
+    --cognigram-400: oklch(72%   0.100 16);
+    --cognigram-500: oklch(64%   0.115 18);
+    --cognigram-600: oklch(56%   0.115 19);
+    --cognigram-700: oklch(48%   0.100 20);
+    --cognigram-800: oklch(38%   0.080 21);
+    --cognigram-900: oklch(30%   0.060 23);
 
-    --accent: var(--keracross-600);
+    --accent: var(--cognigram-600);
     --accent-foreground: oklch(100% 0 0);
-    --focus: var(--keracross-500);
-    --link: var(--keracross-600);
+    --focus: var(--cognigram-500);
+    --link: var(--cognigram-600);
   }
 }
 
 @theme {
-  --color-keracross-50: var(--keracross-50);
-  --color-keracross-100: var(--keracross-100);
-  --color-keracross-200: var(--keracross-200);
-  --color-keracross-300: var(--keracross-300);
-  --color-keracross-400: var(--keracross-400);
-  --color-keracross-500: var(--keracross-500);
-  --color-keracross-600: var(--keracross-600);
-  --color-keracross-700: var(--keracross-700);
-  --color-keracross-800: var(--keracross-800);
-  --color-keracross-900: var(--keracross-900);
+  --color-cognigram-50: var(--cognigram-50);
+  --color-cognigram-100: var(--cognigram-100);
+  --color-cognigram-200: var(--cognigram-200);
+  --color-cognigram-300: var(--cognigram-300);
+  --color-cognigram-400: var(--cognigram-400);
+  --color-cognigram-500: var(--cognigram-500);
+  --color-cognigram-600: var(--cognigram-600);
+  --color-cognigram-700: var(--cognigram-700);
+  --color-cognigram-800: var(--cognigram-800);
+  --color-cognigram-900: var(--cognigram-900);
 }
 
 html,
@@ -64,6 +64,12 @@ body {
 ::-webkit-scrollbar {
   width: 0;
   height: 0;
+}
+
+/* Three-dot typing animation (TypingDots component). */
+@keyframes cog-typing {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.35; }
+  40%           { transform: translateY(-3px); opacity: 1; }
 }
 
 /*

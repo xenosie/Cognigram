@@ -39,9 +39,43 @@ export const EmojiIcon = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 )
 
-export const SendIcon = (p: SVGProps<SVGSVGElement>) => (
+// Send icon — the actual Heroicons "paper-airplane" SVG, dropped in as a
+// file under /public/icons/send.svg (MIT-licensed). Rendered as a CSS mask
+// so we can recolour it just by changing the parent's text color — no
+// hand-drawn SVG path, no extra <img> chrome.
+export const SendIcon = ({
+  className,
+  style,
+}: {
+  className?: string
+  style?: React.CSSProperties
+}) => (
+  <span
+    aria-hidden
+    className={className}
+    style={{
+      display: 'inline-block',
+      backgroundColor: 'currentColor',
+      WebkitMaskImage: 'url(/icons/send.svg)',
+      maskImage: 'url(/icons/send.svg)',
+      WebkitMaskRepeat: 'no-repeat',
+      maskRepeat: 'no-repeat',
+      WebkitMaskSize: 'contain',
+      maskSize: 'contain',
+      WebkitMaskPosition: 'center',
+      maskPosition: 'center',
+      ...style,
+    }}
+  />
+)
+
+// Sticker / smiley icon — composer button that opens the sticker picker.
+export const StickerIcon = (p: SVGProps<SVGSVGElement>) => (
   <svg {...base} {...p}>
-    <path d="M3 11.5 21 4l-3.5 17-4.5-7-3-1.5L3 11.5z" />
+    <circle cx="12" cy="12" r="9" />
+    <path d="M8.5 14c1 1.3 2.2 2 3.5 2s2.5-.7 3.5-2" />
+    <line x1="9" y1="10" x2="9.01" y2="10" />
+    <line x1="15" y1="10" x2="15.01" y2="10" />
   </svg>
 )
 

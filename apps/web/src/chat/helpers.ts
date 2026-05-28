@@ -36,10 +36,19 @@ export function displayNameFromEmail(email: string): string {
 }
 
 /**
- * Prefer the user's @username when it exists, otherwise fall back to a
- * title-cased display name derived from the email local-part.
+ * Order of preference for what to show next to an avatar:
+ *  1. The user's profile display name (`name`)
+ *  2. Their @username
+ *  3. A title-cased name derived from their email local-part
  */
-export function displayNameFor(input: { username?: string | null; email: string }): string {
+export function displayNameFor(input: {
+  name?: string | null
+  username?: string | null
+  email: string
+}): string {
+  if (input.name && input.name.trim().length > 0) {
+    return input.name.trim()
+  }
   if (input.username && input.username.trim().length > 0) {
     return input.username
   }

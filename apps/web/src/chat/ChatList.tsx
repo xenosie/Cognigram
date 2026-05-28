@@ -52,7 +52,7 @@ export function ChatList({ chats, activeId, onSelect, onChatCreated }: Props) {
       setNewEmail('')
     } catch (e) {
       if (e instanceof ApiError && e.status === 404) {
-        setErr('No Keracross user with that email.')
+        setErr('No Cognigram user with that email.')
       } else if (e instanceof ApiError && e.status === 400) {
         setErr(e.message)
       } else {
@@ -78,15 +78,15 @@ export function ChatList({ chats, activeId, onSelect, onChatCreated }: Props) {
       {/* Header */}
       <header className="flex items-center gap-2 border-b border-neutral-200 px-4 py-3">
         <Logo size={28} animated={false} />
-        <span className="text-[15px] font-semibold tracking-tight text-keracross-800">
-          Keracross
+        <span className="text-[15px] font-semibold tracking-tight text-cognigram-800">
+          Cognigram
         </span>
         <div className="ml-auto flex items-center gap-1">
           <button
             type="button"
             onClick={() => setComposing((v) => !v)}
             title="Start new chat"
-            className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-keracross-600"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-cognigram-600"
           >
             <svg
               viewBox="0 0 24 24"
@@ -105,7 +105,7 @@ export function ChatList({ chats, activeId, onSelect, onChatCreated }: Props) {
             type="button"
             onClick={handleLogout}
             title="Log out"
-            className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-keracross-600"
+            className="flex h-8 w-8 items-center justify-center rounded-full text-neutral-500 transition-colors hover:bg-neutral-100 hover:text-cognigram-600"
           >
             <svg
               viewBox="0 0 24 24"
@@ -137,7 +137,7 @@ export function ChatList({ chats, activeId, onSelect, onChatCreated }: Props) {
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
-          className="space-y-2 border-b border-neutral-200 bg-keracross-50/50 px-3 py-3"
+          className="space-y-2 border-b border-neutral-200 bg-cognigram-50/50 px-3 py-3"
         >
           <div className="flex items-center gap-2">
             <TextField
@@ -158,7 +158,7 @@ export function ChatList({ chats, activeId, onSelect, onChatCreated }: Props) {
             </Button>
           </div>
           {err && (
-            <p className="text-[11px] text-keracross-600">{err}</p>
+            <p className="text-[11px] text-cognigram-600">{err}</p>
           )}
         </motion.form>
       )}

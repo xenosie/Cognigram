@@ -17,12 +17,12 @@ export default function Landing() {
         <Logo size={128} />
 
         <motion.h1
-          className="mt-8 text-5xl font-semibold tracking-tight text-keracross-800 sm:text-6xl"
+          className="mt-8 text-5xl font-semibold tracking-tight text-cognigram-800 sm:text-6xl"
           initial={{ opacity: 0, y: 16 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.15, duration: 0.5, ease: 'easeOut' }}
         >
-          Keracross
+          Cognigram
         </motion.h1>
 
         <motion.p
@@ -35,22 +35,16 @@ export default function Landing() {
         </motion.p>
 
         <motion.div
-          className="mt-10 flex flex-col items-center gap-3 sm:flex-row"
+          className="mt-10"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.45, duration: 0.5, ease: 'easeOut' }}
         >
           <Link
-            to="/signup"
-            className={buttonVariants({ variant: 'primary', size: 'lg' }) + ' min-w-44'}
-          >
-            Create account
-          </Link>
-          <Link
             to="/login"
-            className={buttonVariants({ variant: 'ghost', size: 'lg' }) + ' min-w-44'}
+            className={buttonVariants({ variant: 'primary', size: 'lg' }) + ' min-w-56'}
           >
-            Log in
+            Continue with Google
           </Link>
         </motion.div>
 
@@ -60,7 +54,7 @@ export default function Landing() {
           animate={{ opacity: 1 }}
           transition={{ delay: 1, duration: 0.6 }}
         >
-          Click the background to shift the gradient.
+          2026 Cognigram Organization
         </motion.p>
       </div>
     </AnimatedPage>

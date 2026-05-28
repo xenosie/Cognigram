@@ -1,14 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import {
-  Button,
-  FieldError,
-  Input,
-  InputOTP,
-  Label,
-  TextField,
-} from '@heroui/react'
+import { GoogleLogin, type CredentialResponse } from '@react-oauth/google'
 import { Logo } from '../components/Logo'
 import { Background } from '../components/Background'
 import { AnimatedPage } from '../components/AnimatedPage'
@@ -16,61 +9,31 @@ import { auth } from '../api/auth'
 import { ApiError } from '../api/client'
 import { useAuth } from '../store/auth'
 
-type Step = 'credentials' | 'totp'
-
 export default function Login() {
   const navigate = useNavigate()
   const setTokens = useAuth((s) => s.setTokens)
-
-  const [step, setStep] = useState<Step>('credentials')
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [code, setCode] = useState('')
-  const [challengeToken, setChallengeToken] = useState<string | null>(null)
+  const setUser = useAuth((s) => s.setUser)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleCredentials = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!email || !password) return
-    setSubmitting(true)
-    setError(null)
-    try {
-      const res = await auth.login(email.trim().toLowerCase(), password)
-      if (res.status === 'authenticated') {
-        setTokens(res.access_token, res.refresh_token, res.expires_in)
-        navigate('/app', { replace: true })
-      } else if (res.status === 'needs_email_verification') {
-        navigate(
-          `/verify-email?email=${encodeURIComponent(email.trim().toLowerCase())}`,
-        )
-      } else if (res.status === 'needs_totp') {
-        setChallengeToken(res.challenge_token)
-        setStep('totp')
-      }
-    } catch (e) {
-      if (e instanceof ApiError && e.status === 401) {
-        setError('Wrong email or password.')
-      } else {
-        setError(e instanceof ApiError ? e.message : 'Something went wrong.')
-      }
-    } finally {
-      setSubmitting(false)
+  const handleSuccess = async (credentialResponse: CredentialResponse) => {
+    const idToken = credentialResponse.credential
+    if (!idToken) {
+      setError('Google did not return a credential. Try again.')
+      return
     }
-  }
-
-  const handleTotp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!challengeToken || code.length !== 6) return
     setSubmitting(true)
     setError(null)
     try {
-      const tokens = await auth.loginTotp(challengeToken, code)
-      setTokens(tokens.access_token, tokens.refresh_token, tokens.expires_in)
-      navigate('/app', { replace: true })
+      const res = await auth.googleLogin(idToken)
+      setTokens(res.tokens.access_token, res.tokens.refresh_token, res.tokens.expires_in)
+      setUser(res.user)
+      navigate(res.needs_username ? '/pick-username' : '/app', { replace: true })
     } catch (e) {
-      if (e instanceof ApiError && e.status === 401) {
-        setError('That code is wrong or expired.')
+      if (e instanceof ApiError && e.code === 'gmail_only') {
+        setError('Only @gmail.com accounts are allowed.')
+      } else if (e instanceof ApiError && e.code === 'email_not_verified') {
+        setError('Your Google account does not have a verified email.')
       } else {
         setError(e instanceof ApiError ? e.message : 'Something went wrong.')
       }
@@ -82,117 +45,45 @@ export default function Login() {
   return (
     <AnimatedPage className="relative h-screen w-screen overflow-hidden">
       <div className="grid h-full w-full grid-cols-1 lg:grid-cols-[1fr_1.1fr]">
-        {/* Form panel */}
+        {/* Sign-in panel */}
         <div className="relative flex items-center justify-center bg-white px-6 py-10 sm:px-12">
           <div className="w-full max-w-sm">
             <Link to="/" className="inline-flex items-center gap-2">
               <Logo size={36} animated={false} />
-              <span className="text-lg font-semibold tracking-tight text-keracross-800">
-                Keracross
+              <span className="text-lg font-semibold tracking-tight text-cognigram-800">
+                Cognigram
               </span>
             </Link>
 
             <motion.div
-              key={step}
-              initial={{ opacity: 0, x: 12 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ duration: 0.3, ease: 'easeOut' }}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: 'easeOut' }}
               className="mt-10"
             >
               <h1 className="text-3xl font-semibold tracking-tight text-neutral-900">
-                {step === 'credentials' ? 'Welcome back' : 'Two-factor code'}
+                Welcome
               </h1>
-              <p className="mt-2 text-sm text-neutral-500">
-                {step === 'credentials'
-                  ? 'Log in to continue to Keracross.'
-                  : 'Enter the 6-digit code from your authenticator app.'}
-              </p>
 
-              {step === 'credentials' ? (
-                <form onSubmit={handleCredentials} className="mt-8 space-y-5">
-                  <TextField
-                    value={email}
-                    onChange={setEmail}
-                    type="email"
-                    autoComplete="email"
-                    isRequired
-                  >
-                    <Label>Email</Label>
-                    <Input placeholder="you@domain.com" />
-                    <FieldError />
-                  </TextField>
+              <div className="mt-10 flex justify-center">
+                <GoogleLogin
+                  onSuccess={handleSuccess}
+                  onError={() => setError('Google sign-in was cancelled.')}
+                  theme="filled_black"
+                  shape="pill"
+                  size="large"
+                  text="continue_with"
+                />
+              </div>
 
-                  <TextField
-                    value={password}
-                    onChange={setPassword}
-                    type="password"
-                    autoComplete="current-password"
-                    isRequired
-                  >
-                    <Label>Password</Label>
-                    <Input placeholder="••••••••" />
-                    <FieldError />
-                  </TextField>
-
-                  {error && <p className="text-sm text-keracross-600">{error}</p>}
-
-                  <Button
-                    type="submit"
-                    variant="primary"
-                    fullWidth
-                    isDisabled={submitting}
-                  >
-                    {submitting ? 'Signing in…' : 'Continue'}
-                  </Button>
-                </form>
-              ) : (
-                <form
-                  onSubmit={handleTotp}
-                  className="mt-8 flex flex-col items-start gap-6"
-                >
-                  <InputOTP value={code} onChange={setCode} maxLength={6}>
-                    <InputOTP.Group>
-                      {Array.from({ length: 6 }).map((_, i) => (
-                        <InputOTP.Slot key={i} index={i} />
-                      ))}
-                    </InputOTP.Group>
-                  </InputOTP>
-
-                  {error && <p className="text-sm text-keracross-600">{error}</p>}
-
-                  <div className="flex w-full gap-3">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      onPress={() => {
-                        setStep('credentials')
-                        setCode('')
-                        setError(null)
-                      }}
-                    >
-                      Back
-                    </Button>
-                    <Button
-                      type="submit"
-                      variant="primary"
-                      fullWidth
-                      isDisabled={submitting || code.length !== 6}
-                    >
-                      {submitting ? 'Verifying…' : 'Verify & log in'}
-                    </Button>
-                  </div>
-                </form>
+              {submitting && (
+                <p className="mt-4 text-center text-sm text-neutral-500">
+                  Finishing sign-in…
+                </p>
               )}
-
-              <p className="mt-8 text-sm text-neutral-500">
-                Don't have an account?{' '}
-                <Link
-                  to="/signup"
-                  className="font-medium text-keracross-600 hover:text-keracross-700"
-                >
-                  Sign up
-                </Link>
-              </p>
+              {error && (
+                <p className="mt-4 text-center text-sm text-cognigram-600">{error}</p>
+              )}
             </motion.div>
           </div>
         </div>
@@ -200,7 +91,7 @@ export default function Login() {
         {/* Brand panel */}
         <div className="relative hidden lg:block">
           <Background className="absolute inset-0" interactive={false} />
-          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-keracross-900/30 via-keracross-700/20 to-keracross-500/10" />
+          <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-cognigram-900/30 via-cognigram-700/20 to-cognigram-500/10" />
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}

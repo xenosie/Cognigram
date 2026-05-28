@@ -1,27 +1,36 @@
+use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::config::Config;
-use crate::db::Db;
-use crate::email::Mailer;
+use crate::db::Store;
 use crate::hub::Hub;
+use crate::oauth::Verifier;
 
 #[derive(Clone)]
 pub struct AppState(pub Arc<AppStateInner>);
 
 pub struct AppStateInner {
     pub config: Config,
-    pub db: Db,
-    pub mailer: Mailer,
+    pub store: Store,
     pub hub: Hub,
+    pub oauth: Verifier,
+    pub uploads_root: PathBuf,
 }
 
 impl AppState {
-    pub fn new(config: Config, db: Db, mailer: Mailer, hub: Hub) -> Self {
+    pub fn new(
+        config: Config,
+        store: Store,
+        hub: Hub,
+        oauth: Verifier,
+        uploads_root: PathBuf,
+    ) -> Self {
         Self(Arc::new(AppStateInner {
             config,
-            db,
-            mailer,
+            store,
             hub,
+            oauth,
+            uploads_root,
         }))
     }
 }

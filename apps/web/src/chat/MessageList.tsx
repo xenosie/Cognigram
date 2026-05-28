@@ -11,11 +11,14 @@ type Props = {
   messages: Message[]
   meId: string
   other: Participant
+  /** Highest message id the other party has confirmed reading. Outgoing
+   *  bubbles with `msg.id <= otherLastRead` render the double-check. */
+  otherLastRead?: string
 }
 
 const NEAR_BOTTOM_PX = 80
 
-export function MessageList({ messages, meId, other }: Props) {
+export function MessageList({ messages, meId, other, otherLastRead }: Props) {
   const me = useAuth((s) => s.user)
   const scrollRef = useRef<HTMLDivElement | null>(null)
   const [showScrollDown, setShowScrollDown] = useState(false)
@@ -76,25 +79,51 @@ export function MessageList({ messages, meId, other }: Props) {
 
             // Avatar shown beside EVERY message (Telegram-style on the left,
             // mine on the right). Compact 28px circles to keep the rail tight.
-            const incomingAvatar = !mine && (
-              <Avatar id={other.id} email={other.email} size={28} />
+            // Only render an avatar on the LAST message of a same-author run
+            // (Telegram-style). Earlier messages in the run reserve a 28px
+            // gutter so bubbles stay column-aligned.
+            const incomingAvatar = !mine && item.showAvatar && (
+              <Avatar
+                id={other.id}
+                email={other.email}
+                name={other.name}
+                picture={other.picture}
+                size={28}
+              />
             )
-            const outgoingAvatar = mine && me && (
-              <Avatar id={me.id} email={me.email} size={28} />
+            const outgoingAvatar = mine && me && item.showAvatar && (
+              <Avatar
+                id={me.id}
+                email={me.email}
+                name={me.name}
+                picture={me.picture}
+                size={28}
+              />
             )
 
             return (
               <div
                 key={item.key}
-                className={`flex items-end gap-2 ${mine ? 'flex-row-reverse pl-0' : 'pl-0'} ${
+                className={`flex items-end gap-2 ${mine ? 'flex-row-reverse' : ''} ${
                   item.isFirstOfRun ? 'mt-2' : 'mt-[2px]'
                 }`}
               >
                 <div className="w-7 shrink-0">
                   {mine ? outgoingAvatar : incomingAvatar}
                 </div>
-                <div className="min-w-0 max-w-[78%]">
+                {/* Wrapper caps the bubble's width and aligns it to the
+                    avatar side. The bubble itself is content-sized; max-width
+                    here is the ONLY width constraint, so the percentage
+                    resolves cleanly against the row width. */}
+                <div
+                  className={`flex min-w-0 max-w-[85%] sm:max-w-[78%] ${
+                    mine ? 'justify-end' : 'justify-start'
+                  }`}
+                >
                   <MessageBubble
+                    read={
+                      mine && !!otherLastRead && Number(item.msg.id) <= Number(otherLastRead)
+                    }
                     msg={item.msg}
                     mine={mine}
                     hasTail={item.hasTail}
@@ -116,7 +145,7 @@ export function MessageList({ messages, meId, other }: Props) {
             exit={{ opacity: 0, y: 10, scale: 0.9 }}
             transition={{ type: 'spring', stiffness: 320, damping: 24 }}
             onClick={scrollToBottom}
-            className="absolute bottom-4 right-4 flex h-11 w-11 items-center justify-center rounded-full bg-white text-keracross-600 shadow-lg ring-1 ring-black/5 hover:bg-keracross-50"
+            className="absolute bottom-4 right-4 flex h-11 w-11 items-center justify-center rounded-full bg-white text-cognigram-600 shadow-lg ring-1 ring-black/5 hover:bg-cognigram-50"
             aria-label="Scroll to latest"
           >
             <ChevronDownIcon className="h-5 w-5" />

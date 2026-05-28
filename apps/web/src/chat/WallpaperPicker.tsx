@@ -137,7 +137,7 @@ function ThemeSwatch({
       type="button"
       onClick={onClick}
       className={`group flex flex-col items-stretch gap-1 rounded-xl p-1 transition-colors ${
-        active ? 'ring-2 ring-keracross-500' : 'ring-1 ring-neutral-200 hover:ring-neutral-300'
+        active ? 'ring-2 ring-cognigram-500' : 'ring-1 ring-neutral-200 hover:ring-neutral-300'
       }`}
     >
       <div
@@ -169,7 +169,7 @@ function PatternSwatch({
       type="button"
       onClick={onClick}
       className={`flex flex-col items-stretch gap-1 rounded-xl p-1 transition-colors ${
-        active ? 'ring-2 ring-keracross-500' : 'ring-1 ring-neutral-200 hover:ring-neutral-300'
+        active ? 'ring-2 ring-cognigram-500' : 'ring-1 ring-neutral-200 hover:ring-neutral-300'
       }`}
     >
       <div

@@ -1,27 +1,24 @@
 [package]
-name = "keracross-server"
+name = "cognigram-server"
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
 publish = false
 
 [[bin]]
-name = "keracross-server"
+name = "cognigram-server"
 path = "src/main.rs"
-
-[[bin]]
-name = "smoke"
-path = "src/bin/smoke.rs"
 
 [dependencies]
 # Runtime + HTTP
 tokio = { version = "1", features = ["full"] }
-axum = { version = "0.7", features = ["macros", "ws"] }
+axum = { version = "0.7", features = ["macros", "ws", "multipart"] }
+axum-extra = { version = "0.9", features = ["typed-header"] }
 dashmap = "6"
 tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.6", features = ["cors", "trace", "compression-br", "compression-gzip", "limit"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-br", "compression-gzip", "limit", "fs"] }
 hyper = { version = "1", features = ["full"] }
-axum-extra = { version = "0.9", features = ["typed-header"] }
+bytes = "1"
 
 # Logging
 tracing = "0.1"
@@ -30,21 +27,20 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 # Serialization
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+bincode = "1.3"
 
-# MongoDB
-mongodb = { version = "3", features = ["rustls-tls"] }
+# Embedded database (single-writer, MVCC reads)
+redb = "2"
+
+# HTTP client (for Google JWKS only) — rustls keeps it dep-light
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 
 # Crypto
-argon2 = "0.5"
 jsonwebtoken = "9"
-totp-rs = { version = "5", features = ["otpauth"] }
-base64 = "0.22"
 rand = "0.8"
 sha2 = "0.10"
 hex = "0.4"
-
-# Email
-lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "tokio1-rustls-tls", "builder"] }
+uuid = { version = "1", features = ["v4", "fast-rng"] }
 
 # Misc
 chrono = { version = "0.4", features = ["serde"] }
@@ -55,10 +51,15 @@ validator = { version = "0.18", features = ["derive"] }
 async-trait = "0.1"
 once_cell = "1"
 futures-util = "0.3"
-regex = "1"
+
+# Performance: drop-in faster allocator
+[target.'cfg(not(target_env = "msvc"))'.dependencies]
+mimalloc = { version = "0.1", default-features = false }
 
 [profile.release]
-lto = "thin"
+lto = "fat"
 codegen-units = 1
 opt-level = 3
-strip = "symbols"
+panic = "abort"
+strip = true
+incremental = false

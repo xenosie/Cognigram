@@ -1,24 +1,19 @@
 use std::net::SocketAddr;
+use std::path::PathBuf;
 
 #[derive(Clone, Debug)]
 pub struct Config {
-    pub mongodb_uri: String,
-    pub mongodb_db: String,
-    pub smtp_host: String,
-    pub smtp_port: u16,
-    pub smtp_username: String,
-    pub smtp_password: String,
-    pub smtp_from_name: String,
-    pub smtp_from_email: String,
+    pub db_path: PathBuf,
+    pub uploads_dir: PathBuf,
     pub jwt_secret: String,
     pub jwt_access_ttl_secs: u64,
     pub jwt_refresh_ttl_secs: u64,
     pub server_addr: SocketAddr,
     pub cors_origins: Vec<String>,
-    pub totp_issuer: String,
+    pub google_client_id: String,
+    pub gmail_only: bool,
     pub app_name: String,
     pub log_level: String,
-    pub enable_test_endpoints: bool,
 }
 
 impl Config {
@@ -29,6 +24,11 @@ impl Config {
         }
         fn opt(name: &str, default: &str) -> String {
             std::env::var(name).unwrap_or_else(|_| default.to_string())
+        }
+        fn bool_opt(name: &str, default: bool) -> bool {
+            std::env::var(name)
+                .map(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "1" | "true" | "yes"))
+                .unwrap_or(default)
         }
 
         let host = opt("SERVER_HOST", "0.0.0.0");
@@ -42,23 +42,17 @@ impl Config {
             .collect();
 
         Ok(Self {
-            mongodb_uri: req("MONGODB_URI")?,
-            mongodb_db: opt("MONGODB_DB", "app"),
-            smtp_host: req("SMTP_HOST")?,
-            smtp_port: opt("SMTP_PORT", "465").parse()?,
-            smtp_username: req("SMTP_USERNAME")?,
-            smtp_password: req("SMTP_PASSWORD")?,
-            smtp_from_name: opt("SMTP_FROM_NAME", "Keracross"),
-            smtp_from_email: req("SMTP_FROM_EMAIL")?,
+            db_path: PathBuf::from(opt("DB_PATH", "./cognigram.redb")),
+            uploads_dir: PathBuf::from(opt("UPLOADS_DIR", "./data/uploads")),
             jwt_secret: req("JWT_SECRET")?,
             jwt_access_ttl_secs: opt("JWT_ACCESS_TTL_SECS", "900").parse()?,
             jwt_refresh_ttl_secs: opt("JWT_REFRESH_TTL_SECS", "2592000").parse()?,
             server_addr,
             cors_origins,
-            totp_issuer: opt("TOTP_ISSUER", "Keracross"),
-            app_name: opt("APP_NAME", "Keracross"),
+            google_client_id: req("GOOGLE_CLIENT_ID")?,
+            gmail_only: bool_opt("GMAIL_ONLY", true),
+            app_name: opt("APP_NAME", "Cognigram"),
             log_level: opt("LOG_LEVEL", "info"),
-            enable_test_endpoints: opt("ENABLE_TEST_ENDPOINTS", "false") == "true",
         })
     }
 }

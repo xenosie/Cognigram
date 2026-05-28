@@ -1,12 +1,12 @@
 pub mod config;
 pub mod db;
-pub mod email;
 pub mod error;
 pub mod hash;
 pub mod hub;
 pub mod jwt;
 pub mod middleware;
 pub mod models;
+pub mod oauth;
 pub mod routes;
+pub mod seed;
 pub mod state;
-pub mod totp;
